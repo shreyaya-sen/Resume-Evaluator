@@ -1,0 +1,6 @@
+gradio
+groq
+python-dotenv
+pydantic
+pypdf
+python-docx
