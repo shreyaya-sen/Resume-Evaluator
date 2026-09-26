@@ -2,6 +2,7 @@ import os
 import time
 import json
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from groq import Groq
 from pydantic import BaseModel, Field
@@ -280,7 +281,7 @@ def read_docx(file_path):
 
         if paragraph.text.strip():
             text += paragraph.text + "\n"
-    
+
     for table in document.tables:
 
         for row in table.rows:
@@ -305,31 +306,51 @@ def read_resume(file_path):
         return None
 
 
+def process_single_resume(file_path, job):
+    """
+    Does the same work the old for-loop body did for one resume:
+    read -> parse -> score. Runs inside a worker thread so multiple
+    resumes can be in-flight to Groq at the same time.
+    """
+
+    file_path = Path(file_path)
+
+    resume_text = read_resume(file_path)
+
+    if not resume_text:
+        return None
+
+    parsed_resume = parse_resume(resume_text)
+
+    result = final_score(job, parsed_resume)
+
+    return {
+        "name": result.candidate_name,
+        "score": result.score,
+        "assessment": result.assessment
+    }
+
+
 def evaluate_resumes(job_description, uploaded_files):
 
     job = parse_job_description(job_description)
 
     all_results = []
 
-    for file_path in uploaded_files:
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
 
-        file_path = Path(file_path)
+        futures = [
+            executor.submit(process_single_resume, file_path, job)
+            for file_path in uploaded_files
+        ]
 
-        resume_text = read_resume(file_path)
+        for future in as_completed(futures):
 
-        parsed_resume = parse_resume(resume_text)
+            candidate = future.result()
 
-       
-
-        result = final_score(job, parsed_resume)
-
-        
-
-        all_results.append({
-            "name": result.candidate_name,
-            "score": result.score,
-            "assessment": result.assessment
-        })
+            if candidate:
+                all_results.append(candidate)
 
     all_results.sort(
         key=lambda candidate: candidate["score"],
@@ -347,6 +368,8 @@ def evaluate_resumes(job_description, uploaded_files):
         ])
 
     return results
+
+
 with gr.Blocks(fill_width=True) as demo:
 
     gr.Markdown("# Resume Evaluator")
