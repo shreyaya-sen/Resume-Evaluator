@@ -316,11 +316,11 @@ def evaluate_resumes(job_description, uploaded_files):
 
         parsed_resume = parse_resume(resume_text)
 
-        time.sleep(5)
+       
 
         result = final_score(job, parsed_resume)
 
-        time.sleep(5)
+        
 
         all_results.append({
             "name": result.candidate_name,
