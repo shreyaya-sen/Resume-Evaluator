@@ -381,4 +381,8 @@ with gr.Blocks(fill_width=True) as demo:
         outputs=[results]
     )
 
-demo.launch(show_error=True)
+demo.launch(
+    server_name="0.0.0.0",
+    server_port=int(os.environ.get("PORT", 10000)),
+    show_error=True
+)
