@@ -76,7 +76,8 @@ def parse_job_description(job_description):
     response=client.chat.completions.create(
         model=model,
         messages=messages,
-        response_format=response_format
+        response_format=response_format,
+        max_completion_tokens=400
     )
 
     raw_json=response.choices[0].message.content
@@ -167,7 +168,8 @@ def final_score(job, resume):
     response=client.chat.completions.create(
         model=model,
         messages=messages,
-        response_format=response_format
+        response_format=response_format,
+        max_completion_tokens=600
     )
 
     data=json.loads(response.choices[0].message.content)
@@ -235,7 +237,8 @@ def parse_resume(resume_text):
     response=client.chat.completions.create(
         model=model,
         messages=messages,
-        response_format=response_format
+        response_format=response_format,
+        max_completion_tokens=600
     )
 
     raw_output = response.choices[0].message.content
