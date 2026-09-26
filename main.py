@@ -14,7 +14,7 @@ if not my_api_key:
     raise ValueError("API key kaha hai bhai")
 
 client=Groq(api_key=my_api_key)
-model = "openai/gpt-oss-20b"
+model = "qwen/qwen3.8-27b"
 
 
 class JobD(BaseModel):
