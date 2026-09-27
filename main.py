@@ -249,7 +249,9 @@ def process_single_resume(file_path, job):
 
 
 def evaluate_resumes(job_description, uploaded_files):
-
+    if len(uploaded_files) > 3:
+        raise gr.Error("Please upload a maximum of 3 resumes per evaluation.")
+    
     job = parse_job_description(job_description)
 
     all_results = []
