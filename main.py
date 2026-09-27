@@ -9,12 +9,12 @@ from pydantic import BaseModel, Field
 import gradio as gr
 
 load_dotenv()
-my_api_key=os.getenv("GROQ_API_KEY")
+my_api_key = os.getenv("GROQ_API_KEY")
 
 if not my_api_key:
     raise ValueError("API key kaha hai bhai")
 
-client=Groq(api_key=my_api_key)
+client = Groq(api_key=my_api_key)
 model = "qwen/qwen3.8-27b"
 
 
@@ -58,34 +58,34 @@ def parse_job_description(job_description):
     {job_description}
     """
 
-    message_system={
+    message_system = {
         "role": "system",
         "content": system_prompt
     }
 
-    message_user={
+    message_user = {
         "role": "user",
         "content": user_prompt
     }
 
-    messages=[message_system, message_user]
+    messages = [message_system, message_user]
 
-    response_format={
+    response_format = {
         "type": "json_object"
     }
 
-    response=client.chat.completions.create(
+    response = client.chat.completions.create(
         model=model,
         messages=messages,
         response_format=response_format,
         max_completion_tokens=400
     )
 
-    raw_json=response.choices[0].message.content
+    raw_json = response.choices[0].message.content
 
-    job_data=json.loads(raw_json)
+    job_data = json.loads(raw_json)
 
-    job=JobD(**job_data)
+    job = JobD(**job_data)
 
     return job
 
@@ -121,15 +121,12 @@ class Resume(BaseModel):
     certifications: list[str] = []
 
 
-resume_schema = Resume.model_json_schema()
-
-
-def final_score(job, resume):
+def evaluate_single_resume(resume_text, job):
 
     match_schema = MatchResult.model_json_schema()
 
     prompt = f"""
-    You are an HR recruiter.
+    You are an expert HR recruiter.
 
     Compare the candidate's resume with the job description.
 
@@ -137,118 +134,45 @@ def final_score(job, resume):
     {job.model_dump_json(indent=2)}
 
     CANDIDATE RESUME:
-    {resume.model_dump_json(indent=2)}
+    {resume_text}
 
-    Return JSON matching this schema:
-
-    {match_schema}
-
-    Give me:
-
-    1. Candidate name
-    2. Matching skills
-    3. Missing important skills
-    4. Whether experience requirement is met
-    5. Overall match percentage from 0 to 100
-    6. A short final assessment
-
-    Keep the assessment concise and professional.
-    """
-
-    message={
-        "role": "user",
-        "content": prompt
-    }
-
-    messages=[message]
-
-    response_format={
-        "type": "json_object"
-    }
-
-    response=client.chat.completions.create(
-        model=model,
-        messages=messages,
-        response_format=response_format,
-        max_completion_tokens=600
-    )
-
-    data=json.loads(response.choices[0].message.content)
-
-    return MatchResult(**data)
-
-
-def parse_resume(resume_text):
-
-    system_prompt = f"""
-    You are an expert resume parser.
-
-    Extract information from the resume based on its meaning,
-    not only based on exact section headings.
-
-    Different resumes may use different headings.
-
-    For example:
-    - Experience
-    - Professional Experience
-    - Work History
-    - Employment
-    - Internships
-
-    These may all contain relevant experience.
-
-    Skills may also appear in the skills section, work experience,
-    internships or projects.
+    First understand the resume, then compare it with the job description.
 
     Return ONLY valid JSON matching this schema:
 
-    {resume_schema}
+    {match_schema}
 
-    Important rules:
+    Requirements:
 
-    1. Do not invent information.
-    2. If a value is not available, return null.
-    3. If a list has no information, return an empty list.
-    4. Include internships inside experiences.
-    5. Extract skills mentioned across the entire resume.
+    1. Extract the candidate's name.
+    2. Identify matching skills.
+    3. Identify important missing skills.
+    4. Determine whether the experience requirement is met.
+    5. Give an overall match score from 0 to 100.
+    6. Give a short professional assessment.
+    7. Do not invent information.
+    8. Keep the assessment concise.
     """
 
-    user_prompt = f"""
-    Parse the following resume:
-
-    {resume_text}
-    """
-
-    message_system={
-        "role": "system",
-        "content": system_prompt
-    }
-
-    message_user={
-        "role": "user",
-        "content": user_prompt
-    }
-
-    messages=[message_system, message_user]
-
-    response_format={
-        "type": "json_object"
-    }
-
-    response=client.chat.completions.create(
+    response = client.chat.completions.create(
         model=model,
-        messages=messages,
-        response_format=response_format,
-        max_completion_tokens=600
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        response_format={
+            "type": "json_object"
+        },
+        max_completion_tokens=500
     )
 
-    raw_output = response.choices[0].message.content
+    data = json.loads(
+        response.choices[0].message.content
+    )
 
-    data = json.loads(raw_output)
-
-    resume = Resume(**data)
-
-    return resume
+    return MatchResult(**data)
 
 
 from pypdf import PdfReader
@@ -307,11 +231,6 @@ def read_resume(file_path):
 
 
 def process_single_resume(file_path, job):
-    """
-    Does the same work the old for-loop body did for one resume:
-    read -> parse -> score. Runs inside a worker thread so multiple
-    resumes can be in-flight to Groq at the same time.
-    """
 
     file_path = Path(file_path)
 
@@ -320,9 +239,7 @@ def process_single_resume(file_path, job):
     if not resume_text:
         return None
 
-    parsed_resume = parse_resume(resume_text)
-
-    result = final_score(job, parsed_resume)
+    result = evaluate_single_resume(resume_text, job)
 
     return {
         "name": result.candidate_name,
@@ -337,11 +254,14 @@ def evaluate_resumes(job_description, uploaded_files):
 
     all_results = []
 
-    
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
 
         futures = [
-            executor.submit(process_single_resume, file_path, job)
+            executor.submit(
+                process_single_resume,
+                file_path,
+                job
+            )
             for file_path in uploaded_files
         ]
 
@@ -406,6 +326,7 @@ with gr.Blocks(fill_width=True) as demo:
         inputs=[job_description_input, resumes],
         outputs=[results]
     )
+
 
 demo.launch(
     server_name="0.0.0.0",
