@@ -78,7 +78,7 @@ def parse_job_description(job_description):
         model=model,
         messages=messages,
         response_format=response_format,
-        max_completion_tokens=400
+        max_completion_tokens=800
     )
 
     raw_json=response.choices[0].message.content
@@ -170,7 +170,7 @@ def final_score(job, resume):
         model=model,
         messages=messages,
         response_format=response_format,
-        max_completion_tokens=600
+        max_completion_tokens=1000
     )
 
     data=json.loads(response.choices[0].message.content)
@@ -239,7 +239,7 @@ def parse_resume(resume_text):
         model=model,
         messages=messages,
         response_format=response_format,
-        max_completion_tokens=600
+        max_completion_tokens=1000
     )
 
     raw_output = response.choices[0].message.content
